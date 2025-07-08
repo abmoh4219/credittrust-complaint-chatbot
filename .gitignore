@@ -5,6 +5,7 @@ __pycache__/
 *.pyd
 .Python
 env/
+vector_store/
 venv/
 ENV/
 *.env
@@ -18,7 +19,6 @@ ENV/
 *.json
 *.dbdata/
 *data/
-vector_store/
 *.pkl
 *.bin
 *.h5
