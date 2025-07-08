@@ -1,4 +1,4 @@
-import pandas as pd
+import streamlit as st
 from sentence_transformers import SentenceTransformer
 import faiss
 import numpy as np
@@ -8,7 +8,6 @@ from transformers import pipeline
 def load_vector_store(index_path='vector_store/faiss_index_sampled.bin', 
                       metadata_path='vector_store/metadata_sampled.pkl', 
                       chunks_path='vector_store/chunks_sampled.pkl'):
-    """Load FAISS index and metadata."""
     index = faiss.read_index(index_path)
     with open(metadata_path, 'rb') as f:
         metadata = pickle.load(f)
@@ -17,14 +16,12 @@ def load_vector_store(index_path='vector_store/faiss_index_sampled.bin',
     return index, metadata, chunks
 
 def retrieve_chunks(query, index, metadata, chunks, model, top_k=5):
-    """Retrieve top-k relevant chunks."""
     query_embedding = model.encode([query])[0]
     distances, indices = index.search(np.array([query_embedding]).astype('float32'), top_k)
     results = [(chunks[i], metadata[i], distances[0][j]) for j, i in enumerate(indices[0])]
     return results
 
 def generate_answer(query, retrieved_chunks, generator):
-    """Generate answer using retrieved chunks."""
     context = "\n".join([chunk[0] for chunk in retrieved_chunks])
     prompt = f"""You are a financial analyst assistant for CreditTrust. Your task is to answer questions about customer complaints. Use only the provided context to formulate your answer. If the context doesn't contain the answer, state that you don't have enough information. 
 
@@ -36,35 +33,21 @@ Answer:"""
     response = generator(prompt, max_length=200, num_return_sequences=1, truncation=True)[0]['generated_text']
     return response.split("Answer:")[-1].strip(), retrieved_chunks
 
-def evaluate_rag():
-    """Evaluate RAG pipeline with test questions."""
-    model = SentenceTransformer('all-MiniLM-L6-v2')
-    generator = pipeline('text-generation', model='distilgpt2')
-    index, metadata, chunks = load_vector_store()
-    
-    questions = [
-        "Why are people unhappy with BNPL?",
-        "What issues are reported with Credit Cards?",
-        "Are there complaints about delays in Money Transfers?",
-        "What are common problems with Savings Accounts?",
-        "Why do customers complain about Personal Loans?"
-    ]
-    
-    evaluation = []
-    for question in questions:
-        answer, sources = generate_answer(question, retrieve_chunks(question, index, metadata, chunks, model), generator)
-        evaluation.append({
-            'Question': question,
-            'Generated Answer': answer,
-            'Retrieved Sources': [s[0] for s in sources[:2]],
-            'Quality Score': 3,  # Placeholder; adjust based on manual review
-            'Comments': 'Review answer relevance manually'
-        })
-    
-    df_eval = pd.DataFrame(evaluation)
-    df_eval.to_csv('notebooks/evaluation_table.csv', index=False)
-    print("Evaluation table saved to notebooks/evaluation_table.csv")
-    return df_eval
+st.title("CreditTrust Complaint Analysis Chatbot")
+st.write("Ask questions about customer complaints (e.g., 'Why are people unhappy with BNPL?')")
 
-if __name__ == "__main__":
-    evaluate_rag()
+model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+generator = pipeline('text-generation', model='distilgpt2', device=-1)  # -1 for CPU
+index, metadata, chunks = load_vector_store()
+
+query = st.text_input("Enter your question:")
+if st.button("Submit"):
+    if query:
+        answer, sources = generate_answer(query, retrieve_chunks(query, index, metadata, chunks, model), generator)
+        st.write("**Answer:**")
+        st.write(answer)
+        st.write("**Retrieved Sources:**")
+        for i, (chunk, meta, _) in enumerate(sources[:2]):
+            st.write(f"Source {i+1}: {chunk} (Product: {meta['product']}, Complaint ID: {meta['complaint_id']})")
+if st.button("Clear"):
+    st.session_state.clear()
