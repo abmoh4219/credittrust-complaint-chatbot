@@ -18,3 +18,7 @@ ENV/
 *.json
 *.dbdata/
 *data/
+vector_store/
+*.pkl
+*.bin
+*.h5
